@@ -1,12 +1,238 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Site Recovery</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>죽림고수 : 창의 시련</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      background-color: #2c3e50; /* 대나무 숲 느낌의 어두운 배경 */
+      border: 4px solid #fff;
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    }
+  </style>
 </head>
 <body>
-  <h1>사이트가 정상 동작합니다</h1>
-  <p>이 페이지는 자동 생성된 복구용 인덱스입니다.</p>
+
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// 게임 상태
+let gameOver = false;
+let score = 0;
+let startTime = Date.now();
+
+// 플레이어 (고수) 설정
+const player = {
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  radius: 8, // 판정을 위해 캐릭터 크기는 작게 설정
+  speed: 5
+};
+
+// 키 입력 상태
+const keys = {};
+
+// 창(Spear) 배열 및 초기화
+const spears = [];
+const maxSpears = 50; // 최대 창 개수 (시간이 흐를수록 이 수치까지 증가)
+
+// 키보드 이벤트 리스너
+window.addEventListener("keydown", (e) => keys[e.key] = true);
+window.addEventListener("keyup", (e) => keys[e.key] = false);
+
+// 창 생성 함수
+function createSpear() {
+  const side = Math.floor(Math.random() * 4); // 0:상, 1:하, 2:좌, 3:우
+  let x, y, vx, vy;
+  const speed = Math.random() * 3 + 2; // 속도 2 ~ 5
+
+  if (side === 0) { // 상 -> 하
+    x = Math.random() * canvas.width;
+    y = -20;
+    vx = (Math.random() - 0.5) * 2;
+    vy = speed;
+  } else if (side === 1) { // 하 -> 상
+    x = Math.random() * canvas.width;
+    y = canvas.height + 20;
+    vx = (Math.random() - 0.5) * 2;
+    vy = -speed;
+  } else if (side === 2) { // 좌 -> 우
+    x = -20;
+    y = Math.random() * canvas.height;
+    vx = speed;
+    vy = (Math.random() - 0.5) * 2;
+  } else { // 우 -> 좌
+    x = canvas.width + 20;
+    y = Math.random() * canvas.height;
+    vx = -speed;
+    vy = (Math.random() - 0.5) * 2;
+  }
+
+  // 이동 방향에 맞춰 창의 각도(라디안) 계산
+  const angle = Math.atan2(vy, vx);
+
+  spears.push({ x, y, vx, vy, angle, length: 40 });
+}
+
+// 플레이어 이동 로직
+function updatePlayer() {
+  if (keys["ArrowUp"] && player.y > player.radius) player.y -= player.speed;
+  if (keys["ArrowDown"] && player.y < canvas.height - player.radius) player.y += player.speed;
+  if (keys["ArrowLeft"] && player.x > player.radius) player.x -= player.speed;
+  if (keys["ArrowRight"] && player.x < canvas.width - player.radius) player.x += player.speed;
+}
+
+// 창 업데이트 및 충돌 검사
+function updateSpears() {
+  // 시간에 따라 창 개수 동적 증가
+  const currentMax = Math.min(maxSpears, 10 + Math.floor(score / 3)); 
+  if (spears.length < currentMax && Math.random() < 0.05) {
+    createSpear();
+  }
+
+  for (let i = spears.length - 1; i >= 0; i--) {
+    let s = spears[i];
+    s.x += s.vx;
+    s.y += s.vy;
+
+    // 화면 밖으로 완전히 벗어나면 제거 후 재생성
+    if (s.x < -100 || s.x > canvas.width + 100 || s.y < -100 || s.y > canvas.height + 100) {
+      spears.splice(i, 1);
+      continue;
+    }
+
+    // 충돌 검사 (창의 끝 날 부분과 플레이어 중심의 거리 계산)
+    // s.x, s.y가 창의 앞끝(날) 좌표입니다.
+    const dx = s.x - player.x;
+    const dy = s.y - player.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < player.radius + 3) { // 3은 창날의 대략적인 반지름 판정
+      gameOver = true;
+    }
+  }
+}
+
+// 창(Spear) 그리기 함수
+function drawSpear(s) {
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(s.angle);
+
+  // 창의 진행 방향이 오른쪽(0도) 기준일 때 렌더링
+  // s.x, s.y가 창의 맨 앞 점이 되도록 역방향으로 그림을 그립니다.
+
+  // 1. 창자루 (나무 손잡이)
+  ctx.beginPath();
+  ctx.strokeStyle = "#8b5a2b";
+  ctx.lineWidth = 3;
+  ctx.moveTo(-s.length, 0);
+  ctx.lineTo(-8, 0);
+  ctx.stroke();
+
+  // 2. 창 장식 (붉은 깃털/실 효과)
+  ctx.beginPath();
+  ctx.fillStyle = "#e74c3c";
+  ctx.arc(-8, 0, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3. 창날 (철제 뾰족한 부분)
+  ctx.beginPath();
+  ctx.fillStyle = "#ecf0f1";
+  ctx.moveTo(-8, -4);
+  ctx.lineTo(0, 0);  // 이 부분이 창의 진짜 끝점 (s.x, s.y)
+  ctx.lineTo(-8, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// 화면 그리기 전체 로직
+function draw() {
+  // 배경 청소
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 대나무 숲 분위기의 격자 배경 (선택 사항)
+  ctx.strokeStyle = "rgba(39, 174, 96, 0.1)";
+  ctx.lineWidth = 2;
+  for(let i=0; i<canvas.width; i+=40) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+  }
+
+  // 플레이어 그리기 (갓을 쓴 무사 컨셉)
+  ctx.beginPath();
+  ctx.fillStyle = "#f1c40f"; // 몸체
+  ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+  ctx.fill();
+    
+  // 갓 모양 표시
+  ctx.beginPath();
+  ctx.strokeStyle = "#d35400";
+  ctx.lineWidth = 2;
+  ctx.moveTo(player.x - 12, player.y + 2);
+  ctx.lineTo(player.x, player.y - 10);
+  ctx.lineTo(player.x + 12, player.y + 2);
+  ctx.stroke();
+
+  // 모든 창 그리기
+  spears.forEach(drawSpear);
+
+  // 스코어(시간) 표시
+  ctx.fillStyle = "#fff";
+  ctx.font = "20px Arial";
+  ctx.fillText(`버틴 시간: ${score}초`, 20, 40);
+  ctx.fillText(`창 개수: ${spears.length}`, 20, 70);
+
+  // 게임 오버 화면
+  if (gameOver) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#e74c3c";
+    ctx.font = "50px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("게임 오버 (기절)", canvas.width / 2, canvas.height / 2 - 20);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "20px Arial";
+    ctx.fillText(`최종 기록: ${score}초`, canvas.width / 2, canvas.height / 2 + 30);
+    ctx.fillText("F5를 눌러 다시 도전하세요", canvas.width / 2, canvas.height / 2 + 80);
+  }
+}
+
+// 메인 게임 루프
+function gameLoop() {
+  if (!gameOver) {
+    // 생존 시간 계산 (스코어)
+    score = Math.floor((Date.now() - startTime) / 1000);
+
+    updatePlayer();
+    updateSpears();
+  }
+
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// 게임 시작
+gameLoop();
+</script>
+
 </body>
 </html>
